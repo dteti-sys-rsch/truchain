@@ -24,6 +24,7 @@ app.get('/', (req, res) => {
 })
 app.use('/api/did', require('./src/routes/did'))
 app.use('/api/vc', require('./src/routes/vc'))
+app.use('/api/vp', require('./src/routes/vp'))
 
 app.use((req, res, next) => {
   const error = new Error('Not found!')
