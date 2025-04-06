@@ -23,15 +23,17 @@ const {
 const { Client } = require('@iota/sdk-wasm/node')
 const { createDid } = require('../utils/did')
 const crypto = require('crypto')
-const { type } = require('os')
 
-exports.fullVPCode = async (req) => {
+exports.fullVPCode = async (req, res)  => {
   const client = new Client({
     primaryNode: process.env.API_ENDPOINT,
     localPow: true
   })
   const didClient = new IotaIdentityClient(client)
 
+  /*
+    STEP 1: CREATING IDENTITY FOR ISSUER AND HOLDER
+  */
   const issuerSecretManager = {
     mnemonic: process.env.TEST_MNEMONIC_1
   }
@@ -49,6 +51,9 @@ exports.fullVPCode = async (req) => {
     aliceStorage
   )
 
+  /*
+    STEP 2: ISSUER CREATES AND SIGN A VERIFIABLE CREDENTIAL
+  */
   const subject = {
     id: aliceDocument.id(),
     name: 'Alice',
@@ -77,13 +82,17 @@ exports.fullVPCode = async (req) => {
     new JwtCredentialValidationOptions(),
     FailFast.FirstError
   )
-  console.log('credentialjwt validation', response.intoCredential())
 
-  console.log('Sending credential (as JWT) to the holder', unsignedVc.toJSON())
-
+  /*
+    STEP 3: ISSUER SEND VERIFIABLE CREDENTIAL TO HOLDER
+    STEP 4: VERIFIER SEND RANDOM CHALLENGE TO BE SIGNED BY HOLDER
+  */
   const nonce = crypto.randomBytes(16).toString('hex')
   const expires = Timestamp.nowUTC().checkedAdd(Duration.minutes(10))
 
+  /*
+    STEP 5: HOLDER CREATES A PRESENTATION
+  */
   const unsignedVp = new Presentation({
     holder: aliceDocument.id(),
     verifiableCredential: [credentialJwt]
@@ -97,11 +106,10 @@ exports.fullVPCode = async (req) => {
     new JwtPresentationOptions({ expirationDate: expires })
   )
 
-  console.log(
-    'Sending presentation (as JWT) to the verifier',
-    unsignedVp.toJSON()
-  )
-
+  /*
+    STEP 6: HOLDER SENDS PRESENTATION TO VERIFIER
+    STEP 7: VERIFIER VALIDATES PRESENTATION
+  */
   const jwtPresentationValidationOptions = new JwtPresentationValidationOptions(
     {
       presentationVerifierOptions: new JwsVerificationOptions({ nonce })
@@ -151,11 +159,17 @@ exports.fullVPCode = async (req) => {
     )
   }
 
-  console.log('VP successfully validated')
+  res.status(200).json({
+    message: 'VP created and validated successfully',
+    isValid: true,
+    credentialJwtValidation: response.intoCredential(),
+    presentation: decodedPresentation.presentation().toJSON(),
+    nonce,
+  })
 }
 
 /*
-    BEGIN CODE FOR TESTING
+  BEGIN CODE FOR TESTING
 */
 // In-memory nonce store (use Redis or DB in prod)
 const nonceStore = new Map()
@@ -207,7 +221,7 @@ exports.createVP = async (req, res) => {
     new JwtCredentialValidationOptions(),
     FailFast.FirstError
   )
-  console.log('credentialjwt validation', response.intoCredential())
+  console.log('Credential Validation:', response.intoCredential())
 
   // Generate dynamic nonce + expiration
   const nonce = crypto.randomBytes(16).toString('hex')
@@ -235,3 +249,86 @@ exports.createVP = async (req, res) => {
   })
 }
 
+exports.verifyVP = async (req, res) => {
+  try {
+    const { presentationJwt, nonce } = req.body
+
+    if (!presentationJwt || !nonce) {
+      throw new Error('Missing required parameters: presentationJwt and nonce')
+    }
+
+    const client = new Client({
+      primaryNode: process.env.API_ENDPOINT,
+      localPow: true
+    })
+    const didClient = new IotaIdentityClient(client)
+    const resolver = new Resolver({ client: didClient })
+
+    const jwtPresentationValidationOptions =
+      new JwtPresentationValidationOptions({
+        presentationVerifierOptions: new JwsVerificationOptions({ nonce })
+      })
+
+    const jwtObject = new Jwt(presentationJwt)
+    const presentationHolderDID =
+      JwtPresentationValidator.extractHolder(jwtObject)
+    const resolvedHolder = await resolver.resolve(
+      presentationHolderDID.toString()
+    )
+
+    const decodedPresentation = new JwtPresentationValidator(
+      new EdDSAJwsVerifier()
+    ).validate(jwtObject, resolvedHolder, jwtPresentationValidationOptions)
+
+    const credentialValidator = new JwtCredentialValidator(
+      new EdDSAJwsVerifier()
+    )
+    const validationOptions = new JwtCredentialValidationOptions({
+      subjectHolderRelationship: [
+        presentationHolderDID.toString(),
+        SubjectHolderRelationship.AlwaysSubject
+      ]
+    })
+
+    const jwtCredentials = decodedPresentation
+      .presentation()
+      .verifiableCredential()
+      .map((credential) => {
+        const jwt = credential.tryIntoJwt()
+        if (!jwt) throw new Error('Expected a JWT credential')
+        return jwt
+      })
+
+    const issuers = jwtCredentials.map((jwtCredential) =>
+      JwtCredentialValidator.extractIssuerFromJwt(jwtCredential).toString()
+    )
+
+    const resolvedIssuers = await resolver.resolveMultiple(issuers)
+
+    const credentialValidations = []
+    for (let i = 0; i < jwtCredentials.length; i++) {
+      const validation = credentialValidator.validate(
+        jwtCredentials[i],
+        resolvedIssuers[i],
+        validationOptions,
+        FailFast.FirstError
+      )
+      credentialValidations.push(validation.intoCredential())
+    }
+
+    res.status(200).json({
+      success: true,
+      isValid: true,
+      presentation: decodedPresentation.presentation().toJSON(),
+      credentialValidations,
+      holder: presentationHolderDID.toString()
+    })
+  } catch (error) {
+    console.error('Error validating VP:', error)
+    res.status(400).json({
+      success: false,
+      isValid: false,
+      error: error.message
+    })
+  }
+}
