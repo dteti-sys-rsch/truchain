@@ -39,11 +39,6 @@ exports.initConnection = async (req, res) => {
       res.status(500).json({ error: 'Failed to store nonce' })
     })
 }
-/*
-  BEGIN CODE FOR TESTING
-*/
-// In-memory nonce store (use Redis or DB in prod)
-const nonceStore = new Map()
 
 exports.createVP = async (req, res) => {
   const client = new Client({
@@ -112,7 +107,7 @@ exports.createVP = async (req, res) => {
     new JwtPresentationOptions({ expirationDate: expires })
   )
 
-  return res.json({
+  res.status(200).json({
     presentationJwt: presentationJwt.toString(),
     nonce,
     vp: unsignedVp.toJSON()
