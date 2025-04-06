@@ -22,9 +22,7 @@ app.use(cors())
 app.get('/', (req, res) => {
   res.send('Hello from TDLaaS!')
 })
-app.use('/api/did', require('./src/routes/did'))
-app.use('/api/vc', require('./src/routes/vc'))
-app.use('/api/vp', require('./src/routes/vp'))
+app.use('/api/identity', require('./src/routes/identity'))
 
 app.use((req, res, next) => {
   const error = new Error('Not found!')

@@ -1,9 +1,9 @@
 const router = require('express').Router()
 
-const { createVP, verifyVP, fullVPCode } = require('../controllers/vp')
+const { initConnection, createVP, verifyVP } = require('../controllers/identity')
 
+router.post('/init/:id', initConnection)
 router.post('/create', createVP)
 router.post('/verify', verifyVP)
-router.post('/full', fullVPCode)
 
 module.exports = router
