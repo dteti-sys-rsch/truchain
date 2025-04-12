@@ -22,7 +22,7 @@ app.use(cors())
 app.get('/', (req, res) => {
   res.send('Hello from TDLaaS Issuer Module!')
 })
-app.use('/api/identity/vc', require('./src/routes/identity'))
+app.use('/api/identity', require('./src/routes/identity'))
 
 app.use((req, res, next) => {
   const error = new Error('Not found!')
