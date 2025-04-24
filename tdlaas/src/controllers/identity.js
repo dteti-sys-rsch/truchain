@@ -40,6 +40,7 @@ exports.initConnection = async (req, res) => {
     })
 }
 
+// HANDLE DATA DYNAMICALLY
 exports.createVP = async (req, res) => {
   const client = new Client({
     primaryNode: process.env.API_ENDPOINT,
@@ -114,6 +115,7 @@ exports.createVP = async (req, res) => {
   })
 }
 
+// HANDLE DATA DYNAMICALLY
 exports.verifyVP = async (req, res) => {
   try {
     const { presentationJwt, nonce } = req.body

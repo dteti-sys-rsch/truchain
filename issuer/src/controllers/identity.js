@@ -59,8 +59,10 @@ exports.createVC = async (req, res) => {
     expirationDate
   }
 
+  const uniqueId = uuidv4()
+
   const unsignedVc = new Credential({
-    id: `https://tdlaas.aufarhmn.my.id/vc/${uuidv4()}`,
+    id: `https://tdlaas.aufarhmn.my.id/vc/${uniqueId}`,
     type: ['VerifiableCredential', 'RegisteredBankCredential'],
     issuer: issuerDID.issuerDocument.id(),
     credentialSubject: subject
@@ -73,17 +75,20 @@ exports.createVC = async (req, res) => {
     new JwsSignatureOptions()
   )
 
+  // No error thrown means that the credential is valid
   const response = new JwtCredentialValidator(new EdDSAJwsVerifier()).validate(
     credentialJwt,
     issuerDID.issuerDocument,
     new JwtCredentialValidationOptions(),
     FailFast.FirstError
   )
-
+  
+  // Commented code only for testing purpose
   res.status(200).json({
     message: 'VC created successfully',
-    unsignedVc: unsignedVc.toJSON(),
+    // unsignedVc: unsignedVc.toJSON(),
     credentialJwt,
-    credentialValidation: response.intoCredential().toJSON()
+    uniqueId
+    // credentialValidation: response.intoCredential().toJSON()
   })
 }

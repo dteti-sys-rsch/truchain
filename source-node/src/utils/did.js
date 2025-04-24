@@ -8,10 +8,14 @@ const {
 const { Utils, SecretManager } = require('@iota/sdk-wasm/node')
 const { ensureAddressHasFunds } = require('./wallet.js')
 
-/**
-  Creates a DID Document and publishes it in a new Alias Output.
-*/
+let didCache = null
+
 async function createDid(client, secretManager, storage) {
+  if (didCache) {
+    console.log('Returning cached DID')
+    return didCache
+  }
+
   const didClient = new IotaIdentityClient(client)
   const networkHrp = await didClient.getNetworkHrp()
 
@@ -40,12 +44,19 @@ async function createDid(client, secretManager, storage) {
   )
 
   const aliasOutput = await didClient.newDidOutput(address, document)
-
   const published = await didClient.publishDidOutput(secretManager, aliasOutput)
 
-  return { address, document: published, fragment }
+  didCache = { address, document: published, fragment }
+
+  console.log('Created and cached new DID:', published.toJSON())
+  return didCache
 }
 
-module.exports = {
-  createDid
+function getDid() {
+  if (!didCache) {
+    throw new Error('DID not created yet')
+  }
+  return didCache
 }
+
+module.exports = { createDid, getDid }
