@@ -1,7 +1,4 @@
 const {
-  JwkMemStore,
-  KeyIdMemStore,
-  Storage,
   JwsSignatureOptions,
   JwtPresentationOptions,
   Presentation
@@ -18,9 +15,8 @@ const client = new Client({
 async function createHolderDID() {
   try {
     const holderSecretManager = { mnemonic: process.env.HOLDER_MNEMONIC }
-    const holderStorage = new Storage(new JwkMemStore(), new KeyIdMemStore())
-    const { document: holderDocument, fragment: holderFragment } =
-      await createDid(client, holderSecretManager, holderStorage)
+    const { document: holderDocument, fragment: holderFragment, storage: holderStorage } =
+      await createDid(client, holderSecretManager)
 
     return {
       holderDocument,

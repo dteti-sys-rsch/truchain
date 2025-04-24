@@ -1,18 +1,21 @@
 const {
+  JwkMemStore,
+  KeyIdMemStore,
+  Storage,
   IotaDocument,
   IotaIdentityClient,
-  JwkMemStore,
   JwsAlgorithm,
   MethodScope
 } = require('@iota/identity-wasm/node')
 const { Utils, SecretManager } = require('@iota/sdk-wasm/node')
 const { ensureAddressHasFunds } = require('./wallet.js')
 
+const persistentStorage = new Storage(new JwkMemStore(), new KeyIdMemStore())
 let didCache = null
 
-async function createDid(client, secretManager, storage) {
+async function createDid(client, secretManager) {
   if (didCache) {
-    console.log('Returning cached DID')
+    console.log('Using cached DID')
     return didCache
   }
 
@@ -30,13 +33,11 @@ async function createDid(client, secretManager, storage) {
   console.log('Wallet address Bech32:', walletAddressBech32)
 
   await ensureAddressHasFunds(client, walletAddressBech32)
-
   const address = Utils.parseBech32Address(walletAddressBech32)
 
   const document = new IotaDocument(networkHrp)
-
   const fragment = await document.generateMethod(
-    storage,
+    persistentStorage,
     JwkMemStore.ed25519KeyType(),
     JwsAlgorithm.EdDSA,
     '#jwk',
@@ -46,17 +47,23 @@ async function createDid(client, secretManager, storage) {
   const aliasOutput = await didClient.newDidOutput(address, document)
   const published = await didClient.publishDidOutput(secretManager, aliasOutput)
 
-  didCache = { address, document: published, fragment }
+  didCache = {
+    address,
+    document: published,
+    fragment,
+    storage: persistentStorage
+  }
 
-  console.log('Created and cached new DID:', published.toJSON())
   return didCache
 }
 
 function getDid() {
-  if (!didCache) {
-    throw new Error('DID not created yet')
-  }
+  if (!didCache) throw new Error('DID not created yet')
   return didCache
 }
 
-module.exports = { createDid, getDid }
+function clearDidCache() {
+  didCache = null
+}
+
+module.exports = { createDid, getDid, clearDidCache }
