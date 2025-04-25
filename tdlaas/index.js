@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
   res.send('Hello from TDLaaS!')
 })
 app.use('/api/identity', require('./src/routes/identity'))
+app.use('/api/data', require('./src/routes/data'))
 
 app.use((req, res, next) => {
   const error = new Error('Not found!')
