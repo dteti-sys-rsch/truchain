@@ -9,6 +9,10 @@ const app = express()
 const dotenv = require('dotenv')
 dotenv.config()
 
+// MONGODB
+const connectDB = require('./src/config/mongo')
+connectDB()
+
 // MIDDLEWARE
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(bodyParser.json())
