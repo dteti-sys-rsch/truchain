@@ -20,7 +20,9 @@ exports.initConnection = async (req, res) => {
   const nonce = crypto.randomBytes(16).toString('hex')
 
   redisClient
-    .set(`id:${id}`, nonce, { EX: 300 })
+  //  Igonre TTL on testing scenario
+  //  .set(`id:${id}`, nonce, { EX: 300 })
+    .set(`id:${id}`, nonce)
     .then(() => {
       res.status(200).json({ message: 'Nonce generated', nonce })
     })
@@ -31,27 +33,45 @@ exports.initConnection = async (req, res) => {
 }
 
 exports.verifyVP = async (req, res) => {
+  const metrics = {
+    startTime: process.hrtime.bigint(),
+    steps: {},
+    success: false,
+    error: null
+  }
+
   try {
     const { presentationJwt, uniqueId } = req.body
 
+    // Input validation
+    metrics.steps.inputValidationStart = process.hrtime.bigint()
     if (!presentationJwt || !uniqueId) {
       throw new Error(
         'Missing required parameters: presentationJwt and uniqueId'
       )
     }
+    metrics.steps.inputValidationEnd = process.hrtime.bigint()
 
+    // Nonce retrieval
+    metrics.steps.nonceRetrievalStart = process.hrtime.bigint()
     const nonce = await redisClient.get(`id:${uniqueId}`)
     if (!nonce) {
       throw new Error('Invalid or expired nonce')
     }
+    metrics.steps.nonceRetrievalEnd = process.hrtime.bigint()
 
+    // DID Client setup
+    metrics.steps.clientSetupStart = process.hrtime.bigint()
     const client = new Client({
       primaryNode: process.env.API_ENDPOINT,
       localPow: true
     })
     const didClient = new IotaIdentityClient(client)
     const resolver = new Resolver({ client: didClient })
+    metrics.steps.clientSetupEnd = process.hrtime.bigint()
 
+    // Presentation validation
+    metrics.steps.presentationValidationStart = process.hrtime.bigint()
     const jwtPresentationValidationOptions =
       new JwtPresentationValidationOptions({
         presentationVerifierOptions: new JwsVerificationOptions({ nonce })
@@ -67,7 +87,10 @@ exports.verifyVP = async (req, res) => {
     const decodedPresentation = new JwtPresentationValidator(
       new EdDSAJwsVerifier()
     ).validate(jwtObject, resolvedHolder, jwtPresentationValidationOptions)
+    metrics.steps.presentationValidationEnd = process.hrtime.bigint()
 
+    // Credential validation
+    metrics.steps.credentialValidationStart = process.hrtime.bigint()
     const credentialValidator = new JwtCredentialValidator(
       new EdDSAJwsVerifier()
     )
@@ -103,9 +126,19 @@ exports.verifyVP = async (req, res) => {
       )
       credentialValidations.push(validation.intoCredential())
     }
+    metrics.steps.credentialValidationEnd = process.hrtime.bigint()
 
-    // Delete the nonce after successful validation
-    await redisClient.del(`id:${uniqueId}`)
+    // Ignore cleanup on testing scenario
+    // Cleanup
+    // metrics.steps.cleanupStart = process.hrtime.bigint()
+    // await redisClient.del(`id:${uniqueId}`)
+    // metrics.steps.cleanupEnd = process.hrtime.bigint()
+
+    metrics.endTime = process.hrtime.bigint()
+    metrics.success = true
+
+    // Calculate durations
+    const durations = calculateDurations(metrics)
 
     res.status(200).json({
       message: 'VP validated successfully!',
@@ -113,15 +146,60 @@ exports.verifyVP = async (req, res) => {
       isValid: true,
       presentation: decodedPresentation.presentation().toJSON(),
       credentialValidations,
-      holder: presentationHolderDID.toString()
+      holder: presentationHolderDID.toString(),
+      metrics: durations
     })
   } catch (error) {
+    metrics.endTime = process.hrtime.bigint()
+    metrics.error = error.message
+
     console.error('Error validating VP:', error)
     res.status(400).json({
       message: 'VP validation failed!',
       success: false,
       isValid: false,
-      error: error.message
+      error: error.message,
+      metrics: metrics.error ? calculateDurations(metrics) : null
     })
+  }
+}
+
+function calculateDurations(metrics) {
+  const nsToMs = (ns) => {
+    return Number(ns) / 1000000
+  }
+
+  return {
+    totalTimeMs: nsToMs(metrics.endTime - metrics.startTime),
+    steps: {
+      inputValidation: metrics.steps.inputValidationEnd
+        ? nsToMs(
+            metrics.steps.inputValidationEnd -
+              metrics.steps.inputValidationStart
+          )
+        : 0,
+      nonceRetrieval: metrics.steps.nonceRetrievalEnd
+        ? nsToMs(
+            metrics.steps.nonceRetrievalEnd - metrics.steps.nonceRetrievalStart
+          )
+        : 0,
+      clientSetup: metrics.steps.clientSetupEnd
+        ? nsToMs(metrics.steps.clientSetupEnd - metrics.steps.clientSetupStart)
+        : 0,
+      presentationValidation: metrics.steps.presentationValidationEnd
+        ? nsToMs(
+            metrics.steps.presentationValidationEnd -
+              metrics.steps.presentationValidationStart
+          )
+        : 0,
+      credentialValidation: metrics.steps.credentialValidationEnd
+        ? nsToMs(
+            metrics.steps.credentialValidationEnd -
+              metrics.steps.credentialValidationStart
+          )
+        : 0
+    },
+    success: metrics.success,
+    error: metrics.error
   }
 }
