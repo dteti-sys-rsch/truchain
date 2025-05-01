@@ -1,8 +1,16 @@
 const redis = require('redis')
 
-const redisClient = redis.createClient({
-  url: process.env.UPSTASH_REDIS_URL
-})
+let redisClient
+
+if (process.env.REDIS_SETTING === 'local') {
+  console.log('Using local Redis')
+  redisClient = redis.createClient()
+} else {
+  console.log('Using Upstash Redis')
+  redisClient = redis.createClient({
+    url: process.env.UPSTASH_REDIS_URL
+  })
+}
 
 ;(async () => {
   redisClient.on('error', (err) => {
