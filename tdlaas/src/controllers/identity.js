@@ -16,20 +16,63 @@ const crypto = require('crypto')
 const redisClient = require('../config/redis')
 
 exports.initConnection = async (req, res) => {
-  const { id } = req.params
-  const nonce = crypto.randomBytes(16).toString('hex')
+  const metrics = {
+    startTime: process.hrtime.bigint(),
+    steps: {},
+    success: false,
+    error: null
+  }
 
-  redisClient
-  //  Igonre TTL on testing scenario
-  //  .set(`id:${id}`, nonce, { EX: 300 })
-    .set(`id:${id}`, nonce)
-    .then(() => {
-      res.status(200).json({ message: 'Nonce generated', nonce })
+  try {
+    const { id } = req.params
+
+    // 1. Generate nonce
+    metrics.steps.challengeGenerationStart = process.hrtime.bigint()
+    const nonce = crypto.randomBytes(16).toString('hex')
+    metrics.steps.challengeGenerationEnd = process.hrtime.bigint()
+
+    metrics.steps.redisSetStart = process.hrtime.bigint()
+    await redisClient.set(`id:${id}`, nonce)
+    metrics.steps.redisSetEnd = process.hrtime.bigint()
+
+    // 3. Calculate durations
+    const durations = {
+      challengeGen:
+        Number(
+          metrics.steps.challengeGenerationEnd -
+            metrics.steps.challengeGenerationStart
+        ) / 1e6,
+      redisSet:
+        Number(metrics.steps.redisSetEnd - metrics.steps.redisSetStart) / 1e6,
+      total: Number(process.hrtime.bigint() - metrics.startTime) / 1e6
+    }
+
+    metrics.success = true
+
+    res.status(200).json({
+      success: true,
+      nonce,
+      metrics: {
+        durations,
+        redisKey: `id:${id}`
+      }
     })
-    .catch((err) => {
-      console.error('Error storing nonce in Redis:', err)
-      res.status(500).json({ error: 'Failed to store nonce' })
+  } catch (err) {
+    metrics.error = err.message
+    metrics.endTime = process.hrtime.bigint()
+
+    console.error('Init connection failed:', {
+      error: err,
+      params: req.params,
+      metrics
     })
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to initialize connection',
+      details: err.message
+    })
+  }
 }
 
 exports.verifyVP = async (req, res) => {
