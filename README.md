@@ -1,0 +1,1 @@
+# TruChain: A Multi-Layer Architecture for Trusted, Verifiable, and Immutable Open Banking Data
