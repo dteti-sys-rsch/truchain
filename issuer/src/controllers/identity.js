@@ -21,9 +21,8 @@ const client = new Client({
 async function createIssuerDID() {
   try {
     const issuerSecretManager = { mnemonic: process.env.ISSUER_MNEMONIC }
-    const issuerStorage = new Storage(new JwkMemStore(), new KeyIdMemStore())
-    const { document: issuerDocument, fragment: issuerFragment } =
-      await createDid(client, issuerSecretManager, issuerStorage)
+    const { document: issuerDocument, fragment: issuerFragment, storage: issuerStorage } =
+      await createDid(client, issuerSecretManager)
 
     return {
       issuerDocument,
@@ -37,6 +36,13 @@ async function createIssuerDID() {
 }
 
 exports.createVC = async (req, res) => {
+  const metrics = {
+    startTime: process.hrtime.bigint(),
+    steps: {},
+    success: false,
+    error: null
+  }
+
   const {
     legalName,
     registrationNumber,
@@ -61,6 +67,7 @@ exports.createVC = async (req, res) => {
 
   const uniqueId = uuidv4()
 
+  metrics.steps.start = process.hrtime.bigint()
   const unsignedVc = new Credential({
     id: `https://tdlaas.aufarhmn.my.id/vc/${uniqueId}`,
     type: ['VerifiableCredential', 'RegisteredBankCredential'],
@@ -82,13 +89,19 @@ exports.createVC = async (req, res) => {
     new JwtCredentialValidationOptions(),
     FailFast.FirstError
   )
-  
+  metrics.steps.stop = process.hrtime.bigint()
+  metrics.success = true
+
   // Commented code only for testing purpose
   res.status(200).json({
     message: 'VC created successfully',
     // unsignedVc: unsignedVc.toJSON(),
     credentialJwt,
-    uniqueId
+    uniqueId,
+    metrics,
+    durations: {
+      duration: Number(metrics.steps.stop - metrics.steps.start) / 1e6
+    },
     // credentialValidation: response.intoCredential().toJSON()
   })
 }

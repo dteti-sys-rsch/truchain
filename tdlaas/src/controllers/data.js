@@ -71,6 +71,38 @@ exports.storeData = async (req, res) => {
       paymentFormat
     } = req.body
 
+    if (
+      !issuerDid ||
+      !timestamp ||
+      !fromBank ||
+      !fromAccount ||
+      !toBank ||
+      !toAccount ||
+      !amountReceived ||
+      !receivingCurrency ||
+      !amountPaid ||
+      !paymentCurrency ||
+      !paymentFormat
+    ) {
+      return res.status(400).json({
+        message: 'Missing required parameters'
+      })
+    }
+
+    if (!issuerDid.startsWith('did:iota:')) {
+      return res.status(400).json({
+        message: 'Invalid DID format'
+      })
+    }
+
+    if (
+      !timestamp.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/)
+    ) {
+      return res.status(400).json({
+        message: 'Invalid timestamp format'
+      })
+    }
+
     const transactionData = {
       issuerDid,
       timestamp,
@@ -116,7 +148,74 @@ exports.storeData = async (req, res) => {
   }
 }
 
+exports.verifyAndStoreData = async (req, res) => {
+  try {
+    const { credentialJwt } = req.body
+
+    const jwtObj = new Jwt(credentialJwt)
+    const didClient = new IotaIdentityClient(client)
+    const resolver = new Resolver({ client: didClient })
+
+    const holderDID = JwtCredentialValidator.extractIssuerFromJwt(jwtObj)
+    const didDocument = await resolver.resolve(holderDID.toString())
+
+    const decoded_credential = new JwtCredentialValidator(
+      new EdDSAJwsVerifier()
+    ).validate(
+      jwtObj,
+      didDocument,
+      new JwtCredentialValidationOptions(),
+      FailFast.FirstError
+    )
+
+    const credential = JSON.parse(decoded_credential.intoCredential(), null, 2)
+
+    console.log('Decoded credential:', credential)
+    const transactionsWithIssuer =
+      credential.credentialSubject.transactions.map((tx) => ({
+        ...tx,
+        issuerDid: credential.issuer
+      }))
+
+    const dataHash = SHA256(
+      JSON.stringify(transactionsWithIssuer[0])
+    ).toString()
+
+    const secretManager = { mnemonic: process.env.TEST_MNEMONIC_1 }
+    const options = {
+      tag: utf8ToHex('TDLAAS'),
+      data: utf8ToHex(dataHash)
+    }
+
+    const block = await sdkClient.buildAndPostBlock(secretManager, options)
+
+    const savedTransaction = await Transaction.create({
+      iotaBlockId: block[0],
+      ...transactionsWithIssuer[0]
+    })
+
+    res.status(200).json({
+      message: 'Data stored successfully',
+      iota: {
+        rawBlock: block[0],
+        blockId: block.blockId
+      }
+    })
+  } catch (error) {
+    console.error('Error verifying VC:', error)
+    res.status(500).json({
+      message: 'Failed to verify VC',
+      error: error.message
+    })
+  }
+}
+
 exports.queryData = async (req, res) => {
+  const metrics = {
+    startTime: process.hrtime.bigint(),
+    success: false
+  }
+
   try {
     const { blockId } = req.query
 
@@ -155,8 +254,13 @@ exports.queryData = async (req, res) => {
       })
     }
 
+    metrics.endTime = process.hrtime.bigint()
+    metrics.success = true
     res.status(200).json({
       message: 'Data queried successfully',
+      durationMs: (Number(metrics.endTime - metrics.startTime) / 1e6).toFixed(
+        2
+      ),
       transaction: {
         iotaBlockId: blockId,
         ...transactionData

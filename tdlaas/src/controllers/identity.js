@@ -20,7 +20,8 @@ exports.initConnection = async (req, res) => {
   const nonce = crypto.randomBytes(16).toString('hex')
 
   redisClient
-    .set(`id:${id}`, nonce, { EX: 300 })
+    // .set(`id:${id}`, nonce, { EX: 300 })
+    .set(`id:${id}`, nonce)
     .then(() => {
       res.status(200).json({ message: 'Nonce generated', nonce })
     })
@@ -105,7 +106,7 @@ exports.verifyVP = async (req, res) => {
     }
 
     // Delete the nonce after successful validation
-    await redisClient.del(`id:${uniqueId}`)
+    // await redisClient.del(`id:${uniqueId}`)
 
     res.status(200).json({
       message: 'VP validated successfully!',
