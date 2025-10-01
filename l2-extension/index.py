@@ -51,4 +51,10 @@ centroids = kmeans.cluster_centers_
 for i, centroid in enumerate(centroids):
     r.setex(f"centroid:{i}", TTL_SECONDS, json.dumps(centroid.tolist()))
 
+scaler_params = {
+    "mean": scaler.mean_.tolist(),
+    "std": scaler.scale_.tolist()
+}
+r.setex("scaler:params", TTL_SECONDS, json.dumps(scaler_params))
+
 print("Data saved to Redis!")

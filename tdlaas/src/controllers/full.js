@@ -243,3 +243,82 @@ exports.endToEndProd = async (req, res) => {
     })
   }
 }
+
+// L2 EXTENSION
+exports.l2extension = async (req, res) => {
+  try {
+    const {
+      timestamp,
+      fromBank,
+      fromAccount,
+      toBank,
+      toAccount,
+      amountReceived,
+      receivingCurrency,
+      amountPaid,
+      paymentCurrency,
+      paymentFormat
+    } = req.body
+  
+    if (
+      !timestamp ||
+      !fromBank ||
+      !fromAccount ||
+      !toBank ||
+      !toAccount ||
+      !amountReceived ||
+      !receivingCurrency ||
+      !amountPaid ||
+      !paymentCurrency ||
+      !paymentFormat
+    ) {
+      return res.status(400).json({
+        message: 'Missing required parameters'
+      })
+    } 
+
+    const targetCluster = await redisClient.get(`account:${fromAccount}`)
+    const centroidJson = await redisClient.get(`centroid:${targetCluster}`)
+    if (!centroidJson) {
+      return res.status(404).json({ message: "Centroid not found" })
+    }
+    const targetCentroid = JSON.parse(centroidJson)
+
+    const scalerJson = await redisClient.get("scaler:params")
+    if (!scalerJson) {
+      return res.status(500).json({ message: "Scaler params not found" })
+    }
+    const scalerParams = JSON.parse(scalerJson)
+
+    const features = [
+      parseFloat(amountPaid),   // avg_amount surrogate (single tx)
+      0,                        // std_amount surrogate (1 tx = 0)
+      1,                        // freq surrogate (single tx)
+      1,                        // uniq_counterparty surrogate
+      1                         // payment_div surrogate
+    ]
+
+    const scaled = features.map((val, idx) => (val - scalerParams.mean[idx]) / scalerParams.std[idx])
+
+    let distance = 0
+    for (let i = 0; i < scaled.length; i++) {
+      const diff = scaled[i] - targetCentroid[i]
+      distance += diff * diff
+    }
+    distance = Math.sqrt(distance)
+
+    res.status(200).json({
+      message: 'L2 extension successful',
+      targetCluster,
+      targetCentroid,
+      scaledFeatures: scaled,
+      distance
+    })
+  } catch (error) {
+    console.error('Error in L2 extension:', error)
+    res.status(500).json({
+      message: 'Failed in L2 extension',
+      error: error.message
+    })
+  }
+}
