@@ -1,8 +1,10 @@
 # server_fixed_threshold.py
 import os
+from typing import List
 import numpy as np
 import joblib
 from tensorflow.keras.models import load_model
+from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from collections import deque, defaultdict
@@ -137,10 +139,22 @@ def check_new_transaction(account: str, new_amount: float):
         "Reason": reason
     }
 
+class TransactionRequest(BaseModel):
+    account: str
+    amount: float
+
 # ==== ENDPOINT ====
 @app.post("/check_transaction")
 def check_transaction(req: TransactionRequest):
     return check_new_transaction(req.account, req.amount)
+
+@app.post("/check_transaction_batch")
+def check_transaction_batch(reqs: List[TransactionRequest]):
+    results = []
+    for req in reqs:
+        res = check_new_transaction(req.account, req.amount)  # fungsi RePAD2/fast function lo
+        results.append(res)
+    return results
 
 # ==== STARTUP HOOK ====
 @app.on_event("startup")
