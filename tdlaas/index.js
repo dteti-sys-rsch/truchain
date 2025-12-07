@@ -7,7 +7,7 @@ const app = express()
 
 // DOTENV
 const dotenv = require('dotenv')
-dotenv.config()
+dotenv.config({ path: './config.env' })
 
 // MONGODB
 const connectDB = require('./src/config/mongo')
@@ -45,6 +45,7 @@ app.use((error, req, res, next) => {
 
 // SERVER
 const port = process.env.PORT || 5000
+console.log(process.env.PORT)
 app.listen(port, () => {
   console.log('Server is running!')
 })

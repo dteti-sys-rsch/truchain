@@ -8,8 +8,8 @@ from datetime import timedelta
 # ==== CONFIG ====
 SAVE_DIR = "experiment/repad2_models"
 DATA_PATH = "filtered_100_700.csv"
-WINDOW_SIZE = 1000
-THRESH_SIGMA = 1.5
+WINDOW_SIZE = 700
+THRESH_SIGMA = 0.3
 EPS = 1e-8
 
 # ==== LOAD DATA ====
@@ -145,3 +145,4 @@ for acc in sample_accounts:
         all_results[acc] = r
 
 print("\n✅ Evaluation complete.")
+

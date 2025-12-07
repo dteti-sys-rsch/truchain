@@ -6,10 +6,10 @@ from sklearn.preprocessing import MinMaxScaler
 import joblib, os
 
 # ==== PARAMETER ====
-LOOK_BACK = 3
+LOOK_BACK = 100
 WINDOW_SIZE = 1000
-THRESH_SIGMA = 1.5
-EPOCHS = 10
+THRESH_SIGMA = 0.3
+EPOCHS = 50
 SAVE_DIR = "experiment/repad2_models"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
@@ -46,7 +46,7 @@ def train_repad2_per_account(acc, group):
     X, y = np.array(X), np.array(y)
 
     model = Sequential([
-        LSTM(10, input_shape=(LOOK_BACK, 1)),
+        LSTM(64, input_shape=(LOOK_BACK, 1)),
         Dense(1)
     ])
     model.compile(loss='mae', optimizer='adam')
@@ -81,8 +81,8 @@ def train_repad2_per_account(acc, group):
                 })
 
         # === FIX 3: retrain ringan optional ===
-        if t % 10 == 0 and t > 10:
-            model.fit(X[t-10:t], y[t-10:t], epochs=1, verbose=0)
+       	# if t % 10 == 0 and t > 10:
+      	 #     model.fit(X[t-10:t], y[t-10:t], epochs=1, verbose=0)
     
     # Save states
     np.save(f"{SAVE_DIR}/aare_window_{acc}.npy", np.array(AAREs[-WINDOW_SIZE:]))
